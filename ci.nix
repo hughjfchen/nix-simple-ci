@@ -1,3 +1,3 @@
 {}:
 
-(import ./nixpkgs {}).callPackage ./. {}
+(import <nixpkgs> {}).callPackage ./. {}

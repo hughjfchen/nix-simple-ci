@@ -3,9 +3,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
@@ -33,7 +37,23 @@ import           Network.Wai.Logger
 import           Options.Generic
 import           Servant
 import           Servant.GitHub.Webhook
+
+-- To fix the "overlapping instances of servant HasContextEntry",
+-- -- do not import `gitHubKey` and `GitHubKey` unqualified
+import qualified Servant.GitHub.Webhook (GitHubKey, gitHubKey)
+
 import           Turtle hiding (stripPrefix)
+
+-- To fix the "overlapping instances of servant HasContextEntry",
+
+-- HACK
+newtype MyGitHubKey = MyGitHubKey (forall result. Servant.GitHub.Webhook.GitHubKey result)
+
+myGitHubKey :: IO ByteString -> MyGitHubKey
+myGitHubKey k = MyGitHubKey (Servant.GitHub.Webhook.gitHubKey k)
+
+instance HasContextEntry '[MyGitHubKey] (Servant.GitHub.Webhook.GitHubKey result) where
+    getContextEntry (MyGitHubKey x1 :. _) = x1
 
 data Option = Option
   { secret :: ByteString
@@ -83,7 +103,7 @@ main = do
   withStdoutLogger $ \logger -> do
     let settings = setPort port' $ setLogger logger defaultSettings
     runSettings settings $ serveWithContext (Proxy @API)
-                                            (gitHubKey (pure secret) :. EmptyContext)
+                                            (myGitHubKey (pure secret) :. EmptyContext)
                                             (server mgr oauth sem)
 
 server :: Manager -> ByteString -> QSem -> Server API
@@ -106,7 +126,7 @@ server mgr oauth sem WebhookPushEvent ((), obj) = liftIO $ do
         code <- build commit
         liftIO $ pushStatus mgr oauth commit code
       case success of
-        Just _ -> return ()
+        () -> pure ()
         _      -> pushError commit
   where pushError commit = pushStatus mgr oauth commit CommitState_Error
 server _ _ _ event _ = liftIO $ putStrLn $ "This shouldn't happen: Unwanted event: " ++ show event

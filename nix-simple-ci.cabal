@@ -16,7 +16,7 @@ cabal-version:       >=1.10
 executable nix-simple-ci
   main-is:             Main.hs
   -- other-modules:       
-  build-depends:       base >=4.9 && <4.10
+  build-depends:       base
                      , aeson
                      , servant-server
                      , servant-github-webhook
